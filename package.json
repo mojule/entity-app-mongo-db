@@ -1,0 +1,29 @@
+{
+  "name": "@mojule/entity-app-mongo-db",
+  "version": "0.1.0",
+  "description": "Mongo DB for entity-app",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "rimraf dist && tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mojule/entity-app-mongo-db.git"
+  },
+  "keywords": [],
+  "author": "Nik Coughlin <nrkn.com@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/mojule/entity-app-mongo-db/issues"
+  },
+  "homepage": "https://github.com/mojule/entity-app-mongo-db#readme",
+  "dependencies": {
+    "@mojule/entity-app": "^0.3.8",
+    "@mojule/log-iisnode": "^0.2.5",
+    "mongodb": "^3.6.9"
+  },
+  "devDependencies": {
+    "@types/mongodb": "^3.6.18"
+  }
+}
