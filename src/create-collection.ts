@@ -1,34 +1,30 @@
-import { Collection, ObjectId } from 'mongodb'
+import { Collection, Filter, ObjectId, WithId } from 'mongodb'
 
 import {
   DbCollection, DbCreate, DbLoad, DbSave, DbRemove, DbItem, DbIds, DbLoadMany,
   DbCreateMany, DbRemoveMany, DbFind, DbFindOne, dbItemToEntity, 
-  defaultLoadPaged, defaultSaveMany
+  defaultLoadPaged, defaultSaveMany, CreateDbItem
 } from '@mojule/entity-app'
 
-import { log } from '@mojule/log-iisnode'
-
-interface MongoDbItem {
-  _id: ObjectId
-}
-
-// TODO investigate usages of "as any" here and see why @types/mongo complains
-
-const entityToDbEntity = <TEntity>( entity: TEntity ): TEntity & MongoDbItem => {
-  const _id = new ObjectId()
-  const dbEntity = Object.assign( {}, entity, { _id } )
-
-  return dbEntity
-}
-
-export const createCollection = <TEntity>(
-  collection: Collection<TEntity>
+export const createCollection = <TEntity, D extends DbItem>(
+  createDbItem: CreateDbItem<D>,
+  key: string,
+  mongoCollection: Collection<TEntity & D & { _id: ObjectId}>
 ) => {
+  const extendCreate = ( entity: TEntity ) => {
+    const entityD = Object.assign( {}, entity, createDbItem() )
+
+    const dbEntity = Object.assign(
+      entityD, { _id: new ObjectId() }
+    )
+
+    return dbEntity as WithId<TEntity & D & { _id: ObjectId}>
+  }
+
   const ids: DbIds = async () => {  
-    // no longer returns as ObjectId[] but some weird compound type :/
     const objectIds = ( 
-      await collection.distinct( '_id', {}, {} ) 
-    ) as ObjectId[]
+      await mongoCollection.distinct( '_id', {}, {} ) 
+    ) 
     
     const result = objectIds.map( o => o.toHexString() )
 
@@ -36,54 +32,56 @@ export const createCollection = <TEntity>(
   }
 
   const create: DbCreate<TEntity> = async entity => {
-    const dbEntity = entityToDbEntity( entity )
+    const dbEntity = extendCreate( entity )
 
-    await collection.insertOne( dbEntity as any )
+    await mongoCollection.insertOne( dbEntity )
 
     return dbEntity._id.toHexString()
   }
 
   const createMany: DbCreateMany<TEntity> = async entities => {
-    const dbEntities = entities.map( entityToDbEntity )
+    const dbEntities = entities.map( extendCreate )
 
-    await collection.insertMany( dbEntities as any )
+    await mongoCollection.insertMany( dbEntities )
 
     return dbEntities.map( d => d._id.toHexString() )
   }
 
-  const load: DbLoad<TEntity> = async id => {
-    try {
-      const loadResult = <TEntity & DbItem>await collection.findOne(
-        idFilter( id ) as any
+  const load: DbLoad<TEntity,D> = async id => {
+    const loadResult = await mongoCollection.findOne(
+      idFilter( id ) 
+    )
+
+    if( !loadResult ){
+      const { namespace } = mongoCollection
+
+      throw Error( 
+        `expected ${ id } in ${ namespace }, found ${ loadResult }` 
       )
-
-      if( !loadResult ){
-        const { namespace } = collection
-
-        log.debug( 'mongo db load', { id, namespace, loadResult } )
-
-        throw Error( 
-          `expected ${ id } in ${ namespace }, found ${ loadResult }` 
-        )
-      }
-  
-      return normalizeId( loadResult ) 
-    } catch( err ){
-      log.error( err )
-
-      throw err
     }
+
+    return normalizeId( loadResult ) 
   }
 
-  const loadMany: DbLoadMany<TEntity> = async ids => {
+  const loadMany: DbLoadMany<TEntity, D> = async ids => {
     const objectIds = ids.map( objectId )
-    const filter = { _id: { $in: objectIds } }
 
-    const loadResult = <(TEntity & DbItem)[]>await collection.find(
-      filter as any
-    ).toArray()
+    // need to figure out how to type this
+    const filter: Filter<any> = { _id: { $in: objectIds } }
 
-    return loadResult.map( normalizeId )
+    const mongoItems = await mongoCollection.find( filter ).toArray()
+
+    const loadResult = mongoItems.map( normalizeId ) as (TEntity & D)[]
+
+    for( let i = 0; i < ids.length; i++ ){
+      const result = loadResult[ i ]
+
+      if( result === undefined || result._id !== ids[ i ] ){
+        throw Error( `Expected ${ key }:${ ids[ i ] }` )
+      }
+    }
+
+    return loadResult
   }
 
   const save: DbSave<TEntity> = async document => {
@@ -92,10 +90,17 @@ export const createCollection = <TEntity>(
     if ( typeof _id !== 'string' )
       throw Error( 'Expected document to have _id:string' )
 
-    const entity = dbItemToEntity( document )
+    // need to figure out how to type this
+    const $set: Partial<TEntity> = {}
 
-    await collection.updateOne(
-      idFilter( _id ) as any, { $set: entity }
+    for( const key in document ){
+      if( key === '_id' ) continue
+
+      $set[ key ] = document[ key ]
+    }
+    
+    await mongoCollection.updateOne(
+      idFilter( _id ), { $set: $set as any }
     )
   }
 
@@ -103,32 +108,36 @@ export const createCollection = <TEntity>(
   const saveMany = defaultSaveMany( save )
 
   const remove: DbRemove = async id => {
-    await collection.deleteOne( idFilter( id ) as any )
+    await mongoCollection.deleteOne( idFilter( id ) )
   }
 
   const removeMany: DbRemoveMany = async ids => {
     const objectIds = ids.map( objectId )
-    const filter = { _id: { $in: objectIds } }
+    // need to figure out how to type this
+    const filter: Filter<any> = { _id: { $in: objectIds } }
 
-    await collection.deleteMany( filter as any )
+    await mongoCollection.deleteMany( filter )
   }
 
-  const find: DbFind<TEntity> = async criteria => {
-    const cursor = collection.find( criteria )
+  const find: DbFind<TEntity, D> = async criteria => {
+    const cursor = mongoCollection.find( criteria )
     const result = await cursor.toArray()
 
-    return ( <( TEntity & DbItem )[]>result ).map( normalizeId )
+    return result.map( normalizeId )
   }
 
-  const findOne: DbFindOne<TEntity> = async criteria => {
-    const result = await collection.findOne( criteria )
+  const findOne: DbFindOne<TEntity, D> = async criteria => {
+    const filter = criteria as Filter<TEntity & D>
 
-    return normalizeId( result )
+    const result = await mongoCollection.findOne( filter )
+
+    if( result !== undefined )
+      return normalizeId( result )
   }
 
   const loadPaged = defaultLoadPaged( ids, loadMany )
 
-  const entityCollection: DbCollection<TEntity> = {
+  const entityCollection: DbCollection<TEntity, D> = {
     ids, create, createMany, load, loadMany, save, saveMany, remove, removeMany,
     find, findOne, loadPaged
   }
@@ -140,8 +149,11 @@ const objectId = ( id: string ) => new ObjectId( id )
 
 const idFilter = ( id: string ) => ( { _id: objectId( id ) } )
 
-const normalizeId = <TEntity>( document: TEntity ) => {
-  if( !document ) throw Error( 'Expected object with _id property' )
+export const normalizeId = <TEntity>( document: TEntity ) => {
+  if( 
+    !document || !document[ '_id' ] 
+  ) throw Error( 'Expected object with _id property' )
+  
   const objectId: ObjectId = document[ '_id' ]
   const _id = objectId.toHexString()
   const dbItem: DbItem = { _id }

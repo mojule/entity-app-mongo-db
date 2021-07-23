@@ -1,28 +1,41 @@
 import { 
-  DbCollections, eachEntityKey, EntityDb, EntityKeys 
+  CreateDbItem,
+  DbCollections, DbItem, eachEntityKey, EntityDb, EntityKeys 
 } from '@mojule/entity-app'
 
-import { MongoClient } from 'mongodb'
+import { MongoClient, MongoClientOptions } from 'mongodb'
 import { createCollection } from './create-collection'
-import { MongoOptions } from './types'
+import { EntityMongoOptions } from './types'
 
-export const createMongoDb = async <TEntityMap>(
-  name: string, keys: EntityKeys<TEntityMap>,
-  { uri }: MongoOptions = { uri: 'mongodb://localhost:27017' }
+export const createMongoDb = async <TEntityMap,D extends DbItem = DbItem>(
+  name: string, keys: EntityKeys<TEntityMap>, 
+  createDbItem: CreateDbItem<D>,
+  options: EntityMongoOptions
 ) => {
-  const client = await MongoClient.connect( uri, { useNewUrlParser: true, useUnifiedTopology: true } )
-  const mongoDb = client.db( name )
+  const { uri, clientOptions, dbOptions } = options
+  const client = await (
+    clientOptions ?
+    MongoClient.connect( uri, clientOptions ) :
+    MongoClient.connect( uri )
+  )
 
-  const drop = () => mongoDb.dropDatabase()
+  const mongoDb = client.db( name, dbOptions )
+
+  const drop = async () => { 
+    await mongoDb.dropDatabase()
+  }
+
   const close = () => client.close()
 
-  const collections: DbCollections<TEntityMap> = <any>{}
+  const collections: DbCollections<TEntityMap, D> = <any>{}
 
   await eachEntityKey( keys, async key => {
-    collections[ key ] = createCollection( mongoDb.collection( key ) )
+    collections[ key ] = createCollection( 
+      createDbItem, key, mongoDb.collection( key ) 
+    )
   } )
 
-  const db: EntityDb<TEntityMap> = { drop, close, collections }
+  const db: EntityDb<TEntityMap, D> = { drop, close, collections }
 
   return db
 }

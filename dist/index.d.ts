@@ -1,3 +1,3 @@
-import { EntityDb, EntityKeys } from '@mojule/entity-app';
-import { MongoOptions } from './types';
-export declare const createMongoDb: <TEntityMap>(name: string, keys: EntityKeys<TEntityMap>, { uri }?: MongoOptions) => Promise<EntityDb<TEntityMap>>;
+import { CreateDbItem, DbItem, EntityDb, EntityKeys } from '@mojule/entity-app';
+import { EntityMongoOptions } from './types';
+export declare const createMongoDb: <TEntityMap, D extends DbItem = DbItem>(name: string, keys: EntityKeys<TEntityMap>, createDbItem: CreateDbItem<D>, options: EntityMongoOptions) => Promise<EntityDb<TEntityMap, D>>;
