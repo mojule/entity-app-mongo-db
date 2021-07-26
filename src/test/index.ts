@@ -1,41 +1,18 @@
-import { createDefaultDbItem, DbItem, DbRefFor, EntityDb, EntityKeys, secureDbFactory } from '@mojule/entity-app'
-import { MongoClientOptions, MongoOptions, ObjectId } from 'mongodb'
-import { createMongoDb } from '..'
-import * as configJson from './fixtures/config.json'
 import * as assert from 'assert'
 import { randId } from '@mojule/util'
+import { MongoClientOptions, ObjectId } from 'mongodb'
+
+import { createDefaultDbItem, DbItem, EntityDb } from '@mojule/entity-app'
+
+import { createMongoDb } from '..'
 import { normalizeId } from '../create-collection'
 import { EntityMongoOptions } from '../types'
 
+import * as configJson from './fixtures/config.json'
+import { EntityMap, entityKeys, Foo } from './fixtures/types'
+
 const { uri, clientOptions, dbOptions } = configJson as EntityMongoOptions
 
-type Foo = {
-  name: string
-  value: number
-}
-
-type DbBar = Foo & {
-  foo?: DbRefFor<EntityMap, 'foo'>
-}
-
-type BarModel = Foo & {
-  foo?: Foo
-}
-
-type EntityMap = {
-  foo: Foo
-  bar: DbBar
-}
-
-type EntityModels = {
-  foo: Foo
-  bar: BarModel
-}
-
-const entityKeys: EntityKeys<EntityMap> = {
-  foo: 'foo',
-  bar: 'bar'
-}
 
 const dbName = () => `test-mongo-db-${randId()}`
 

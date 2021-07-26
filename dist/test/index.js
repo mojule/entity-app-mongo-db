@@ -1,20 +1,17 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const entity_app_1 = require("@mojule/entity-app");
-const mongodb_1 = require("mongodb");
-const __1 = require("..");
-const configJson = require("./fixtures/config.json");
 const assert = require("assert");
 const util_1 = require("@mojule/util");
+const mongodb_1 = require("mongodb");
+const entity_app_1 = require("@mojule/entity-app");
+const __1 = require("..");
 const create_collection_1 = require("../create-collection");
+const configJson = require("./fixtures/config.json");
+const types_1 = require("./fixtures/types");
 const { uri, clientOptions, dbOptions } = configJson;
-const entityKeys = {
-    foo: 'foo',
-    bar: 'bar'
-};
 const dbName = () => `test-mongo-db-${util_1.randId()}`;
 const testDb = async (callback) => {
-    const db = await __1.createMongoDb(dbName(), entityKeys, entity_app_1.createDefaultDbItem, { uri, clientOptions, dbOptions });
+    const db = await __1.createMongoDb(dbName(), types_1.entityKeys, entity_app_1.createDefaultDbItem, { uri, clientOptions, dbOptions });
     await callback(db);
     await db.drop();
     await db.close();
@@ -26,7 +23,7 @@ describe('mongo-db', () => {
     }));
     it('db with client options', async () => {
         const clientOptions = { raw: false };
-        const db = await __1.createMongoDb(dbName(), entityKeys, entity_app_1.createDefaultDbItem, { uri, clientOptions });
+        const db = await __1.createMongoDb(dbName(), types_1.entityKeys, entity_app_1.createDefaultDbItem, { uri, clientOptions });
         await db.drop();
         await db.close();
     });

@@ -3,9 +3,32 @@ import {
   DbCollections, DbItem, eachEntityKey, EntityDb, EntityKeys 
 } from '@mojule/entity-app'
 
-import { MongoClient, MongoClientOptions } from 'mongodb'
+import { Db, MongoClient } from 'mongodb'
 import { createCollection } from './create-collection'
 import { EntityMongoOptions } from './types'
+
+export const mongoDbFactory =  async <TEntityMap,D extends DbItem = DbItem>(
+  mongoDb: Db,
+  keys: EntityKeys<TEntityMap>, 
+  createDbItem: CreateDbItem<D>,
+  close: () => Promise<void>,
+) => { 
+  const drop = async () => { 
+    await mongoDb.dropDatabase()
+  }
+
+  const collections: DbCollections<TEntityMap, D> = {} as any
+
+  await eachEntityKey( keys, async key => {
+    collections[ key ] = createCollection( 
+      createDbItem, key, mongoDb.collection( key ) 
+    )
+  } )
+
+  const db: EntityDb<TEntityMap, D> = { drop, close, collections }
+
+  return db  
+}
 
 export const createMongoDb = async <TEntityMap,D extends DbItem = DbItem>(
   name: string, keys: EntityKeys<TEntityMap>, 
@@ -21,21 +44,7 @@ export const createMongoDb = async <TEntityMap,D extends DbItem = DbItem>(
 
   const mongoDb = client.db( name, dbOptions )
 
-  const drop = async () => { 
-    await mongoDb.dropDatabase()
-  }
-
-  const close = () => client.close()
-
-  const collections: DbCollections<TEntityMap, D> = <any>{}
-
-  await eachEntityKey( keys, async key => {
-    collections[ key ] = createCollection( 
-      createDbItem, key, mongoDb.collection( key ) 
-    )
-  } )
-
-  const db: EntityDb<TEntityMap, D> = { drop, close, collections }
-
-  return db
+  return mongoDbFactory( 
+    mongoDb, keys, createDbItem, async () => await client.close() 
+  )
 }
